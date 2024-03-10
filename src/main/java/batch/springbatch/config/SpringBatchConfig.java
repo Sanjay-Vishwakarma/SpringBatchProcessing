@@ -5,6 +5,7 @@ import batch.springbatch.repository.CustomerRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -20,6 +21,9 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.beans.factory.annotation.Value;
+
+import java.io.File;
 
 @Configuration
 @AllArgsConstructor
@@ -30,9 +34,10 @@ public class SpringBatchConfig {
 
 
     @Bean
-    public FlatFileItemReader<Customer> reader() {
+    @StepScope
+    public FlatFileItemReader<Customer> reader(@Value("#{jobParameters['fullPathName']}") String pathToFile) {
         FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
-        itemReader.setResource(new FileSystemResource("src/main/resources/customers.csv"));
+        itemReader.setResource(new FileSystemResource(new File(pathToFile)));
         itemReader.setName("csvReader");
         itemReader.setLinesToSkip(1);
         itemReader.setLineMapper(lineMapper());
@@ -70,10 +75,10 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    public Step step1(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+    public Step step1(JobRepository jobRepository, PlatformTransactionManager transactionManager,FlatFileItemReader<Customer> reader) {
         return new StepBuilder("csv-step",jobRepository).
                 <Customer, Customer>chunk(10,transactionManager)
-                .reader(reader())
+                .reader(reader)
                 .processor(processor())
                 .writer(writer())
                 .taskExecutor(taskExecutor())
@@ -81,9 +86,9 @@ public class SpringBatchConfig {
     }
 
     @Bean
-    public Job runJob(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+    public Job runJob(JobRepository jobRepository, PlatformTransactionManager transactionManager,FlatFileItemReader<Customer> reader) {
         return new JobBuilder("importCustomers",jobRepository)
-                .flow(step1(jobRepository,transactionManager)).end().build();
+                .flow(step1(jobRepository,transactionManager,reader)).end().build();
     }
 
     @Bean
